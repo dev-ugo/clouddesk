@@ -29,3 +29,6 @@ jobs:
 
       - name: Run Ruff
         run: uv run --locked ruff check .
+
+            - name: Run tests
+        run: uv run --locked python -m pytest
