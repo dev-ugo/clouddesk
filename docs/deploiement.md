@@ -1,111 +1,111 @@
-# Déploiement de CloudDesk sur Azure App Service
+# Deploying CloudDesk to Azure App Service
 
-Ce guide documente le premier déploiement manuel de l'API. Les commandes Bash sont destinées à WSL/Ubuntu et se lancent depuis la racine du dépôt. Le résultat fonctionnel a été confirmé le **18 octobre 2026**, par une réponse de `/health` dans Azure.
+This guide documents the API's first manual deployment. The Bash commands are intended for WSL/Ubuntu and run from the repository root. The working result was confirmed on **October 18, 2026**, by a response from `/health` in Azure.
 
-## 1. Préparer l'environnement Azure
+## 1. Prepare the Azure environment
 
-Pour reproduire l'hébergement, disposer d'un abonnement actif et des droits nécessaires pour créer et configurer ses ressources.
+To reproduce the hosting setup, you need an active subscription and the permissions required to create and configure its resources.
 
-### Groupe de ressources
+### Resource group
 
-Dans le portail Azure, créer ou sélectionner `rg-clouddesk-dev` et ajouter les tags :
+In the Azure portal, create or select `rg-clouddesk-dev` and add the tags:
 
-| Tag | Valeur |
+| Tag | Value |
 | --- | --- |
 | `project` | `clouddesk` |
 | `environment` | `dev` |
 
-L'emplacement du groupe concerne ses métadonnées. Les ressources du groupe peuvent avoir un emplacement différent. Les tags du groupe ne sont pas automatiquement hérités par les ressources ; les ajouter à celles-ci si nécessaire.
+The group's location applies to its metadata. Resources in the group can have a different location. Group tags are not automatically inherited by resources; add them to those resources if needed.
 
-### Région autorisée
+### Allowed region
 
-Le premier essai dans la région initialement choisie a été refusé par une stratégie de l'abonnement. La liste consultée pendant la séance était :
+The first attempt in the initially selected region was rejected by a subscription policy. The list checked during the session was:
 
 ```json
 ["belgiumcentral","germanywestcentral","denmarkeast","austriaeast","francecentral"]
 ```
 
-Le déploiement a ensuite été réalisé dans **France Central**. Pour un autre abonnement, consulter sa propre liste : **Azure Policy / Stratégie → Affectations → politique de régions autorisées → Paramètres**.
+The deployment was then carried out in **France Central**. For another subscription, check its own list: **Policy → Assignments → allowed regions policy → Parameters**.
 
-### Application et plan
+### Application and plan
 
-Dans **App Services → Créer → Application web**, utiliser :
+In **App Services → Create → Web App**, use:
 
-| Paramètre | Valeur |
+| Setting | Value |
 | --- | --- |
-| Groupe de ressources | `rg-clouddesk-dev` |
-| Nom | `app-clouddesk-dev`, ou un nom disponible pour une reproduction |
-| Publication | Code |
-| Pile | Python |
-| Version | Version compatible avec `requires-python` et cohérente avec la version locale |
-| Système | Linux |
-| Région | France Central, sous réserve d'autorisation et de disponibilité |
-| Nouveau plan | `asp-clouddesk-dev-frc` |
-| Niveau | Free F1 |
+| Resource group | `rg-clouddesk-dev` |
+| Name | `app-clouddesk-dev`, or an available name when reproducing the setup |
+| Publish | Code |
+| Stack | Python |
+| Version | A version compatible with `requires-python` and consistent with the local version |
+| Operating system | Linux |
+| Region | France Central, subject to permission and availability |
+| New plan | `asp-clouddesk-dev-frc` |
+| Tier | Free F1 |
 
-Vérifier F1 dans le récapitulatif avant création. La disponibilité d'un niveau dépend notamment de la région et de l'abonnement. Le déploiement continu et Application Insights n'ont pas été ajoutés à ce jalon.
+Check F1 in the summary before creation. Tier availability depends on factors including the region and subscription. Continuous deployment and Application Insights were not added at this milestone.
 
-L'application et son plan utilisent la même région. L'adresse publique exacte se trouve dans **Vue d'ensemble → Domaine par défaut** ; elle peut contenir un suffixe généré.
+The application and its plan use the same region. The exact public address is in **Overview → Default domain**; it may contain a generated suffix.
 
-### Budget du laboratoire
+### Lab budget
 
-Configuration demandée pendant la séance :
+Configuration requested during the session:
 
-| Paramètre | Valeur |
+| Setting | Value |
 | --- | --- |
-| Nom | `budget-lab-azure` |
-| Étendue | Abonnement personnel |
-| Filtre | Aucun |
-| Réinitialisation | Mensuelle |
-| Montant | 5 dans la devise affichée par Azure |
-| Début / expiration prévus | 1er octobre 2026 / 1er octobre 2027 |
-| Alertes | Coût réel à 50 %, 80 % et 100 %, vers l'adresse personnelle |
+| Name | `budget-lab-azure` |
+| Scope | Personal subscription |
+| Filter | None |
+| Reset | Monthly |
+| Amount | 5 in the currency displayed by Azure |
+| Planned start / expiration | October 1, 2026 / October 1, 2027 |
+| Alerts | Actual cost at 50%, 80%, and 100%, sent to the personal email address |
 
-Les valeurs et la devise exactes sont à consulter dans le budget créé. Ce montant est un seuil choisi pour le laboratoire, pas une estimation du coût de l'API. Les notifications utilisent des données mises à jour avec un délai ; elles ne bloquent pas les dépenses.
+Check the exact values and currency in the budget that was created. This amount is a threshold chosen for the lab, not an estimate of the API's cost. Notifications use data updated with a delay; they do not block spending.
 
-## 2. Préparer le projet Python
+## 2. Prepare the Python project
 
-Le code à déployer se trouve dans `main.py`. Les dépendances `fastapi` et `uvicorn` sont déclarées dans `pyproject.toml`, avec leurs versions résolues dans `uv.lock`.
+The code to deploy is in `main.py`. The `fastapi` and `uvicorn` dependencies are declared in `pyproject.toml`, with their resolved versions in `uv.lock`.
 
-Pour cette structure simple, conserver la configuration suivante :
+For this simple structure, keep the following configuration:
 
 ```toml
 [tool.uv]
 package = false
 ```
 
-Si `[tool.uv]` existe déjà, ajouter la clé dans cette section. Ce réglage demande à uv de gérer les dépendances sans construire et installer CloudDesk lui-même comme paquet Python.
+If `[tool.uv]` already exists, add the key to that section. This setting tells uv to manage dependencies without building and installing CloudDesk itself as a Python package.
 
-Après une modification de configuration :
+After a configuration change:
 
 ```bash
 uv lock
 uv sync --locked
 ```
 
-La commande `uv lock` actualise le lockfile si nécessaire ; `uv sync --locked` vérifie sa cohérence avant de synchroniser l'environnement.
+The `uv lock` command updates the lockfile if needed; `uv sync --locked` checks its consistency before synchronizing the environment.
 
-## 3. Se connecter et relever les versions
+## 3. Sign in and record versions
 
-Installer [Azure CLI pour Linux](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-linux?pivots=apt) si nécessaire, puis :
+Install [Azure CLI for Linux](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-linux?pivots=apt) if needed, then:
 
 ```bash
 az login --use-device-code
 az account show --query name --output tsv
 ```
 
-Vérifier que le nom affiché correspond au bon abonnement. Si nécessaire, le sélectionner explicitement avec `az account set --subscription "NOM_OU_ID"`.
+Check that the displayed name matches the correct subscription. If needed, select it explicitly with `az account set --subscription "NOM_OU_ID"`.
 
-Définir les raccourcis utilisés dans les commandes suivantes :
+Define the shortcuts used in the following commands:
 
 ```bash
 CLOUDDESK_RG="rg-clouddesk-dev"
 CLOUDDESK_APP="app-clouddesk-dev"
 ```
 
-Adapter le nom de l'application à celui réellement créé. Ces variables Bash appartiennent au terminal courant. `$CLOUDDESK_APP` récupère la valeur enregistrée ; `--name "$CLOUDDESK_APP"` fournit donc ce nom à Azure CLI. Elles ne sont pas des paramètres enregistrés dans l'application Azure.
+Adjust the application name to the one actually created. These Bash variables belong to the current terminal. `$CLOUDDESK_APP` retrieves the stored value; `--name "$CLOUDDESK_APP"` therefore passes that name to Azure CLI. They are not settings stored in the Azure application.
 
-Consulter les versions et la pile configurée :
+Check the versions and configured stack:
 
 ```bash
 uv --version
@@ -118,11 +118,11 @@ az webapp config show \
   --output json
 ```
 
-L'exacte version utilisée le 18 octobre n'a pas été consignée ; ces commandes indiquent l'état au moment où elles sont exécutées.
+The exact version used on October 18 was not recorded; these commands show the state at the time they are run.
 
-## 4. Configurer la préparation et le démarrage
+## 4. Configure build and startup
 
-Activer la préparation du code lors du déploiement :
+Enable code preparation during deployment:
 
 ```bash
 az webapp config appsettings set \
@@ -132,9 +132,9 @@ az webapp config appsettings set \
   --output none
 ```
 
-Le moteur de build Oryx prend en charge `pyproject.toml` avec `uv.lock` pour utiliser uv. Les deux fichiers doivent être inclus à la racine de l'archive.
+The Oryx build engine supports `pyproject.toml` with `uv.lock` to use uv. Both files must be included at the root of the archive.
 
-Définir la commande de démarrage :
+Set the startup command:
 
 ```bash
 az webapp config set \
@@ -144,23 +144,44 @@ az webapp config set \
   --output none
 ```
 
-| Élément | Signification |
+| Item | Meaning |
 | --- | --- |
-| `python -m uvicorn` | Lance le serveur Uvicorn dans l'environnement Python de l'application. |
-| `main:app` | Charge l'objet `app` du fichier `main.py`. |
-| `--host 0.0.0.0` | Écoute sur les interfaces réseau du conteneur pour recevoir les requêtes acheminées par la plateforme. |
-| `--port 8000` | Utilise le port d'écoute de notre serveur dans le conteneur. |
+| `python -m uvicorn` | Starts the Uvicorn server in the application's Python environment. |
+| `main:app` | Loads the `app` object from the `main.py` file. |
+| `--host 0.0.0.0` | Listens on the container's network interfaces to receive requests routed by the platform. |
+| `--port 8000` | Uses our server's listening port inside the container. |
 
-`--reload` est réservé à l'exécution locale de développement. Azure gère l'entrée HTTPS publique ; cette commande concerne le processus à l'intérieur de l'environnement hébergé.
+`--reload` is reserved for local development. Azure handles public HTTPS ingress; this command concerns the process inside the hosted environment.
 
-## 5. Construire l'archive et la déployer
+### Addition applied on October 19: warm-up
+
+The following session added these settings in **Settings → Environment variables → App settings**:
+
+| Name | Value |
+| --- | --- |
+| `WEBSITE_WARMUP_PATH` | `/health` |
+| `WEBSITE_WARMUP_STATUSES` | `200` |
+
+They define the path and response Azure expects before considering the container ready at startup. To reproduce this setting with Azure CLI, the equivalent of the portal operation is:
+
+```bash
+az webapp config appsettings set \
+  --resource-group "$CLOUDDESK_RG" \
+  --name "$CLOUDDESK_APP" \
+  --settings WEBSITE_WARMUP_PATH=/health WEBSITE_WARMUP_STATUSES=200 \
+  --output none
+```
+
+Changing app settings triggers a restart. The validation procedure is described in the [monitoring guide](supervision.md#4-configure-warm-up-on-health).
+
+## 5. Build the archive and deploy it
 
 ```bash
 uv run python -m zipfile -c /tmp/clouddesk.zip \
   main.py pyproject.toml uv.lock README.md
 ```
 
-L'archive contient le code et les fichiers nécessaires à la préparation. L'environnement local `.venv`, Git et les éventuels fichiers `.env` restent en dehors. Les fichiers doivent être directement à la racine du ZIP, sans dossier parent `clouddesk/`.
+The archive contains the code and the files required for preparation. The local `.venv` environment, Git, and any `.env` files are left out. Files must be directly at the root of the ZIP, without a parent `clouddesk/` folder.
 
 ```bash
 az webapp deploy \
@@ -170,11 +191,11 @@ az webapp deploy \
   --type zip
 ```
 
-La commande cible la Web App existante. Répéter cette étape après une modification du code, en recréant d'abord le ZIP. Si le code utilise plus tard d'autres fichiers, adapter son contenu.
+The command targets the existing Web App. Repeat this step after a code change, recreating the ZIP first. If the code later uses other files, adjust its contents.
 
-## 6. Vérifier l'application
+## 6. Verify the application
 
-Récupérer le domaine réellement attribué à la Web App :
+Retrieve the domain actually assigned to the Web App:
 
 ```bash
 CLOUDDESK_HOST=$(az webapp show \
@@ -186,51 +207,51 @@ CLOUDDESK_HOST=$(az webapp show \
 curl --fail-with-body --include "https://$CLOUDDESK_HOST/health"
 ```
 
-Résultat attendu : une réponse **HTTP 200** contenant :
+Expected result: an **HTTP 200** response containing:
 
 ```json
 {"status":"ok","application":"clouddesk"}
 ```
 
-La documentation interactive est accessible sur le même domaine avec `/docs`. L'URL racine `/` peut répondre 404, car aucune route `/` n'a été définie dans cette version.
+The interactive documentation is available on the same domain at `/docs`. The root URL `/` may return 404, because no `/` route has been defined in this version.
 
-Cette validation confirme la réponse de notre API au moment du test. Elle ne constitue pas encore une surveillance continue ni une vérification de la disponibilité future.
+This validation confirms our API's response at the time of the test. It does not yet provide continuous monitoring or verify future availability.
 
-## 7. Incidents rencontrés et enseignements
+## 7. Issues encountered and lessons learned
 
-### Région refusée
+### Region rejected
 
-**Observation :** Azure a refusé `app-clouddesk-dev` avec un message indiquant que l'abonnement ne pouvait déployer que dans certaines régions.
+**Observation:** Azure rejected `app-clouddesk-dev` with a message stating that the subscription could only deploy to certain regions.
 
-**Action et résultat :** consultation des régions autorisées, puis création de l'hébergement dans France Central.
+**Action and result:** checked the allowed regions, then created the hosting setup in France Central.
 
-**Enseignement :** une stratégie Azure peut bloquer une création qui ne respecte pas ses règles. Le groupe de ressources peut conserver son emplacement de métadonnées tout en regroupant des ressources hébergées ailleurs.
+**Lesson:** an Azure policy can block a creation that does not comply with its rules. The resource group can keep its metadata location while grouping resources hosted elsewhere.
 
-### Construction du paquet Python impossible
+### Python package build failed
 
-**Erreur observée :**
+**Observed error:**
 
 ```text
 Expected a Python module at: src/clouddesk/__init__.py
 ```
 
-**Cause identifiée :** la configuration de packaging attendait un paquet sous `src/clouddesk/`, alors que l'archive envoyée contenait une application `main.py` à la racine.
+**Identified cause:** the packaging configuration expected a package under `src/clouddesk/`, while the uploaded archive contained a `main.py` application at the root.
 
-**Correction appliquée :** ajout de `package = false` dans `[tool.uv]`, actualisation du lockfile, puis reconstruction et redéploiement du ZIP. L'avertissement de version du backend de build n'était pas l'erreur fatale affichée.
+**Applied fix:** added `package = false` in `[tool.uv]`, updated the lockfile, then rebuilt and redeployed the ZIP. The build backend version warning was not the fatal error displayed.
 
-**Enseignement :** les fichiers livrés et la configuration du projet doivent décrire la même structure.
+**Lesson:** the delivered files and project configuration must describe the same structure.
 
-### Attente « Starting the site… »
+### Waiting at "Starting the site…"
 
-**Observation :** Azure CLI affichait encore ces messages après environ 143 secondes, alors que `/health` renvoyait déjà la réponse attendue.
+**Observation:** Azure CLI was still displaying these messages after about 143 seconds, while `/health` was already returning the expected response.
 
-**Conclusion établie :** l'API répondait. La cause de l'attente du suivi CLI n'a pas été déterminée pendant la séance ; aucune correction supplémentaire du démarrage n'a été validée.
+**Established conclusion:** the API was responding. The cause of the CLI tracking wait was not determined during the session; no additional startup fix was validated.
 
-**Action :** vérification de la route HTTP et interruption possible de l'attente locale avec `Ctrl+C`, une fois la réponse confirmée. Interrompre cette attente n'arrête pas la Web App.
+**Action:** checked the HTTP route, with the option to interrupt the local wait using `Ctrl+C` once the response was confirmed. Interrupting this wait does not stop the Web App.
 
-## 8. Consulter les journaux en cas d'échec
+## 8. Check logs in case of failure
 
-Dans un second terminal, redéfinir les deux variables Bash, puis :
+In a second terminal, redefine the two Bash variables, then:
 
 ```bash
 az webapp log config \
@@ -244,27 +265,28 @@ az webapp log tail \
   --name "$CLOUDDESK_APP"
 ```
 
-La commande `log tail` suit les journaux en continu ; `Ctrl+C` ferme cette consultation. Le portail propose également **Surveillance → Flux de journaux**. Examiner les erreurs réelles avant de modifier une dépendance ou la commande de démarrage.
+The `log tail` command follows logs continuously; `Ctrl+C` closes this view. The portal also provides **Monitoring → Log stream**. Examine the actual errors before changing a dependency or the startup command. The [monitoring guide](supervision.md) describes the portal procedure and the observed logs.
 
-## 9. Versionner la documentation
+## 9. Version the documentation
 
-Depuis la racine du dépôt, après intégration de ces deux fichiers :
+From the repository root, after adding the documentation files:
 
 ```bash
-git diff -- README.md docs/deploiement.md pyproject.toml uv.lock
-git add README.md docs/deploiement.md pyproject.toml uv.lock
-git commit -m "Document first Azure deployment and technical choices"
+git add README.md docs/deploiement.md docs/supervision.md
+git diff --cached -- README.md docs/deploiement.md docs/supervision.md
+git commit -m "Document Azure deployment and monitoring setup"
 ```
 
-## Références officielles
+## Official references
 
-- [Groupes de ressources](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal)
-- [Tags et héritage](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/tag-resources)
-- [Création et gestion des budgets](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets)
-- [Déployer une API Python dans App Service](https://learn.microsoft.com/en-us/azure/app-service/quickstart-python)
-- [Configuration Python, Oryx et démarrage](https://learn.microsoft.com/en-us/azure/app-service/configure-language-python)
-- [Configuration du packaging uv](https://docs.astral.sh/uv/concepts/projects/config/)
-- [Commande az webapp deploy](https://learn.microsoft.com/en-us/cli/azure/webapp#az-webapp-deploy)
-- [Journaux App Service](https://learn.microsoft.com/en-us/cli/azure/webapp/log)
+- [Resource groups](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/manage-resource-groups-portal)
+- [Tags and inheritance](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/tag-resources)
+- [Creating and managing budgets](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets)
+- [Deploy a Python API to App Service](https://learn.microsoft.com/en-us/azure/app-service/quickstart-python)
+- [Python configuration, Oryx, and startup](https://learn.microsoft.com/en-us/azure/app-service/configure-language-python)
+- [uv packaging configuration](https://docs.astral.sh/uv/concepts/projects/config/)
+- [az webapp deploy command](https://learn.microsoft.com/en-us/cli/azure/webapp#az-webapp-deploy)
+- [App Service logs](https://learn.microsoft.com/en-us/cli/azure/webapp/log)
+- [Warm-up settings](https://learn.microsoft.com/en-us/azure/app-service/reference-app-settings)
 
-[Retour au README](../README.md)
+[Back to README](../README.md)

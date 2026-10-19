@@ -1,104 +1,114 @@
 # CloudDesk
 
-Projet personnel de préparation aux certifications **AZ-900**, puis **AZ-104** : construire progressivement une API de suivi de demandes IT et comprendre les choix nécessaires à son hébergement dans Azure.
+Personal project to prepare for the **AZ-900**, then **AZ-104** certifications: gradually build an API for tracking IT requests and understand the choices required to host it in Azure.
 
-## État du projet
+## Project status
 
-**Premier déploiement validé le 18 octobre 2026** : la route `GET /health` répond depuis Azure App Service. Cette documentation décrit ce jalon ; elle ne constitue pas une nouvelle vérification de l'environnement Azure.
+**First deployment validated on October 18, 2026**: the `GET /health` route responds from Azure App Service.
 
-La création et le traitement des demandes IT sont les prochaines fonctionnalités prévues. À ce stade, l'application expose une route de contrôle et sa documentation OpenAPI.
+**Monitoring practiced on October 19, 2026**: observing requests and 404 responses, saving a private dashboard, reading logs, configuring warm-up on `/health`, and reviewing the administration history. This documentation covers the observations confirmed during these sessions.
 
-| Élément | Configuration retenue |
+Creating and processing IT requests are the next planned features. At this stage, the application exposes a health endpoint and its OpenAPI documentation.
+
+| Item | Selected configuration |
 | --- | --- |
-| API | Python, FastAPI et Uvicorn |
-| Gestion du projet Python | uv, `pyproject.toml` et `uv.lock` |
-| Exécution locale | WSL/Ubuntu |
-| Groupe de ressources | `rg-clouddesk-dev` |
-| Application web | `app-clouddesk-dev` |
-| Plan App Service prévu lors de la création | `asp-clouddesk-dev-frc`, niveau Free F1 |
-| Région d'hébergement | France Central (`francecentral`) |
-| Déploiement | Archive ZIP envoyée avec Azure CLI |
-| Suivi des coûts | Budget au niveau de l'abonnement, sans filtre de groupe de ressources |
+| API | Python, FastAPI, and Uvicorn |
+| Python project management | uv, `pyproject.toml`, and `uv.lock` |
+| Local execution | WSL/Ubuntu |
+| Resource group | `rg-clouddesk-dev` |
+| Web application | `app-clouddesk-dev` |
+| App Service plan specified at creation | `asp-clouddesk-dev-frc`, Free F1 tier |
+| Hosting region | France Central (`francecentral`) |
+| Deployment | ZIP archive uploaded with Azure CLI |
+| Cost tracking | Subscription-level budget, without a resource group filter |
+| Monitoring view | Private dashboard `CloudDesk - Dev`, `Requests` and `Http 404` metrics |
+| Logs | App Service File System and Log stream |
+| Startup check | `/health`, with expected status `200` |
 
-La version Python et les versions des outils n'ont pas été relevées lors de la première séance. Les commandes permettant de les consulter sont dans le [guide de déploiement](docs/deploiement.md).
+The Python version and tool versions were not recorded during the first session. The commands for checking them are in the [deployment guide](docs/deploiement.md).
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    client["Client HTTP"]
-    subgraph abonnement["Abonnement Azure personnel"]
-        subgraph groupe["Groupe de ressources : rg-clouddesk-dev"]
-            plan["App Service Plan F1 : France Central"]
-            web["Web App : app-clouddesk-dev"]
-            plan -->|Fournit les capacités de calcul| web
+    client["HTTP client"]
+    subgraph abonnement["Personal Azure subscription"]
+        subgraph groupe["Resource group: rg-clouddesk-dev"]
+            plan["App Service Plan F1: France Central"]
+            web["Web App: app-clouddesk-dev"]
+            plan -->|Provides compute capacity| web
         end
-        budget["Budget et alertes"]
-        budget -.->|Suit les coûts| groupe
+        budget["Budget and alerts"]
+        budget -.->|Tracks costs| groupe
     end
-    client -->|HTTPS : GET /health| web
+    client -->|HTTPS: GET /health| web
 ```
 
-Le groupe de ressources organise les composants. Le plan définit les capacités d'hébergement et le niveau tarifaire. La Web App porte la configuration de l'application et son domaine. Un budget à l'échelle de l'abonnement suit aussi les dépenses des ressources éventuellement créées en dehors de ce groupe.
+The resource group organizes the components. The plan defines the hosting capacity and pricing tier. The Web App holds the application's configuration and its domain. A subscription-wide budget also tracks spending on any resources created outside this group.
 
-## Exécution locale
+## Local execution
 
-Prérequis : [uv](https://docs.astral.sh/uv/getting-started/installation/) et une version Python compatible avec `requires-python` dans `pyproject.toml`.
+Prerequisites: [uv](https://docs.astral.sh/uv/getting-started/installation/) and a Python version compatible with `requires-python` in `pyproject.toml`.
 
-Depuis la racine du projet :
+From the project root:
 
 ```bash
 uv sync --locked
 uv run uvicorn main:app --reload
 ```
 
-Ouvrir :
+Open:
 
-- Contrôle de l'API : <http://localhost:8000/health>
-- Documentation interactive : <http://localhost:8000/docs>
+- API health check: <http://localhost:8000/health>
+- Interactive documentation: <http://localhost:8000/docs>
 
-Réponse attendue sur `/health` :
+Expected response from `/health`:
 
 ```json
 {"status":"ok","application":"clouddesk"}
 ```
 
-Le contrôle confirme que la route de l'application répond. Il ne mesure pas sa disponibilité dans le temps et ne vérifie aucune dépendance externe.
+The check confirms that the application's route responds. It does not measure availability over time or check any external dependencies.
 
-## Choix techniques et raisons
+## Technical choices and rationale
 
-| Choix | Pourquoi ce choix pour ce jalon ? | Limite ou conséquence |
+| Choice | Why this choice for this milestone? | Limitation or consequence |
 | --- | --- | --- |
-| FastAPI | Fournir rapidement une API Python et concentrer l'apprentissage sur Azure. | Les fonctions métier restent à construire. |
-| uv | Gérer les dépendances et conserver leurs versions résolues dans `uv.lock`. | Le lockfile doit être versionné et livré avec le code. |
-| Application Python à la racine | Démarrer directement l'objet `app` de `main.py`. | Configuration `package = false` pour éviter une construction de paquet attendue sous `src/`. |
-| App Service, modèle PaaS | Confier la gestion des serveurs et du système à Azure. | Le code, les dépendances, les données et les accès restent sous notre responsabilité. |
-| Offre F1 | Commencer par une capacité d'hébergement gratuite pour l'apprentissage. | Quotas, capacités limitées et absence de SLA ; offre destinée aux essais. |
-| France Central | Utiliser une région autorisée par cet abonnement étudiant. | Cette autorisation est propre à l'abonnement et doit être revérifiée lors d'une reproduction. |
-| Groupe dédié au développement | Faciliter la gestion du cycle de vie de CloudDesk. | Une suppression du groupe supprime les ressources qu'il contient. |
-| Déploiement ZIP manuel | Comprendre les étapes d'envoi, de préparation et de démarrage du code. | Les nouvelles versions nécessitent un nouveau déploiement manuel. |
-| Budget au niveau de l'abonnement | Suivre les dépenses de tout le laboratoire. | Les alertes n'arrêtent pas les ressources ni la consommation. |
+| FastAPI | Quickly provide a Python API and focus learning on Azure. | The business features still need to be built. |
+| uv | Manage dependencies and keep their resolved versions in `uv.lock`. | The lockfile must be versioned and delivered with the code. |
+| Python application at the root | Start the `app` object from `main.py` directly. | Set `package = false` to avoid a package build expecting files under `src/`. |
+| App Service, PaaS model | Delegate server and system management to Azure. | Code, dependencies, data, and access remain our responsibility. |
+| F1 tier | Start with free hosting capacity for learning. | Quotas, limited capacity, and no SLA; a tier intended for testing. |
+| France Central | Use a region allowed by this student subscription. | This permission is specific to the subscription and must be checked again when reproducing the setup. |
+| Dedicated development group | Make CloudDesk's lifecycle easier to manage. | Deleting the group deletes the resources it contains. |
+| Manual ZIP deployment | Understand the steps for uploading, preparing, and starting the code. | New versions require another manual deployment. |
+| Subscription-level budget | Track spending across the entire lab. | Alerts do not stop resources or consumption. |
+| Private dashboard | Retrieve monitoring charts without rebuilding their configuration. | Created in the portal and associated with the account; its JSON export is not yet versioned. |
+| Warm-up on `/health` | Wait for a 200 response from the API before considering the container ready. | The check covers startup; the current route checks the API's response. |
 
-La gratuité du plan F1 concerne ce plan ; tout service ajouté au projet devra être évalué séparément.
+The F1 plan's free pricing applies to that plan; any service added to the project must be assessed separately.
 
-## Responsabilités avec le PaaS
+## Responsibilities with PaaS
 
-| Azure | Responsable du projet |
+| Azure | Project owner |
 | --- | --- |
-| Infrastructure physique, serveurs et système de la plateforme | Code, dépendances et configuration de démarrage |
-| Exploitation de la plateforme App Service | Configuration des accès et protection des données de l'application |
+| Physical infrastructure, servers, and platform operating system | Code, dependencies, and startup configuration |
+| Operating the App Service platform | Access configuration and protection of application data |
 
-Cette répartition permet de relier le projet aux notions AZ-900 de PaaS et de responsabilité partagée.
+This division connects the project to the AZ-900 concepts of PaaS and shared responsibility.
 
-## Déployer et diagnostiquer
+## Practical guides
 
-Le [guide de déploiement](docs/deploiement.md) contient les réglages Azure, les commandes, la validation HTTP et le compte rendu des incidents rencontrés.
+- [Deployment](docs/deploiement.md): resources, Python configuration, Azure CLI commands, and issues from the first deployment.
+- [Monitoring and diagnostics](docs/supervision.md): Metrics, private dashboard, Log stream, warm-up, and Activity log, with the observed results.
 
-## Références officielles
+The explanations are in French and the Azure portal labels are in English.
+
+## Official references
 
 - [App Service](https://learn.microsoft.com/en-us/azure/app-service/overview)
-- [Plans App Service](https://learn.microsoft.com/en-us/azure/app-service/overview-hosting-plans)
-- [Tarification App Service Linux](https://azure.microsoft.com/en-us/pricing/details/app-service/linux/)
-- [Projets uv](https://docs.astral.sh/uv/guides/projects/)
-- [Configuration du packaging uv](https://docs.astral.sh/uv/concepts/projects/config/)
-- [Responsabilité partagée dans le cloud](https://learn.microsoft.com/en-us/azure/security/fundamentals/shared-responsibility)
+- [App Service plans](https://learn.microsoft.com/en-us/azure/app-service/overview-hosting-plans)
+- [App Service Linux pricing](https://azure.microsoft.com/en-us/pricing/details/app-service/linux/)
+- [uv projects](https://docs.astral.sh/uv/guides/projects/)
+- [uv packaging configuration](https://docs.astral.sh/uv/concepts/projects/config/)
+- [Shared responsibility in the cloud](https://learn.microsoft.com/en-us/azure/security/fundamentals/shared-responsibility)
