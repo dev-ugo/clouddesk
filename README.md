@@ -103,6 +103,7 @@ This division connects the project to the AZ-900 concepts of PaaS and shared res
 - [Monitoring and diagnostics](docs/supervision.md): Metrics, private dashboard, Log stream, warm-up, and Activity log, with the observed results.
 - [CI/CD with GitHub Actions and Azure](docs/ci-cd.md)
 - [Azure Blob Storage](docs/storage.md)
+- [Terraform: adopting the existing storage account](docs/terraform.md)
 
 The explanations are in French and the Azure portal labels are in English.
 
