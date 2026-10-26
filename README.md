@@ -101,6 +101,8 @@ This division connects the project to the AZ-900 concepts of PaaS and shared res
 
 - [Deployment](docs/deploiement.md): resources, Python configuration, Azure CLI commands, and issues from the first deployment.
 - [Monitoring and diagnostics](docs/supervision.md): Metrics, private dashboard, Log stream, warm-up, and Activity log, with the observed results.
+- [CI/CD with GitHub Actions and Azure](docs/ci-cd.md)
+- [Azure Blob Storage](docs/storage.md)
 
 The explanations are in French and the Azure portal labels are in English.
 
