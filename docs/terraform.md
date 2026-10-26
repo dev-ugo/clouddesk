@@ -18,7 +18,7 @@ Terraform describes the desired configuration of infrastructure. Its provider co
 | Storage account region | `francecentral` |
 | Terraform resource address | `azurerm_storage_account.clouddesk` |
 | State storage | Local state in the original working directory |
-| Execution | Terraform commands run locally through WSL Ubuntu |
+| Execution | Local planning and application through WSL Ubuntu; formatting and validation in GitHub Actions |
 
 Only the storage account is imported. The resource group, App Service, App Service plan, managed identity, role assignments, container `documents`, and its blobs have not been imported as separate Terraform resources. Existing blob contents remain in Azure; importing an account does not download or back up those contents.
 
@@ -26,7 +26,7 @@ The storage configuration and manual recovery tests are documented in [Azure Blo
 
 ## Repository files
 
-All Terraform commands in this document run from the repository root, using `-chdir=infra/terraform`.
+Local Terraform commands in this document run from the repository root, using `-chdir=infra/terraform`. The CI job uses `infra/terraform` as its working directory.
 
 | File | Responsibility |
 |---|---|
@@ -186,6 +186,24 @@ Terraform checks for differences when commands run. Continuous drift monitoring 
 
 The adoption commit was `761ee0f`, titled `infra: adopt existing Azure storage account with Terraform`. It included the four Terraform files and `.gitignore`. The owner reported one successful Python check and the expected skipped application deployment on the pull request, followed by successful checks after merging into `main`.
 
-The existing GitHub workflow validates Python and deploys the application on pushes to `main`. It currently runs no Terraform commands. A successful Python check therefore does not validate the Terraform configuration, and merging this configuration does not execute `terraform apply`.
+The subsequent change on `ci/terraform-checks` adds the **Check Terraform** job to `.github/workflows/ci.yml`. On 26 October 2026, the owner confirmed that the Python and Terraform jobs passed on its pull request, deployment was skipped as expected, and both checks were marked **Required** after updating the **Protect main** ruleset. This records the PR checks; it does not claim a completed post-merge deployment for that change.
 
-Potential next steps are Terraform formatting and validation in CI, a protected remote state backend, importing additional existing resources, and reusable configuration for another environment. These remain future work.
+### Terraform checks in CI
+
+The job runs on `ubuntu-24.04`, has a 10-minute timeout, and installs Terraform **1.16.7** with `hashicorp/setup-terraform@v4.0.1`. Its working directory is `infra/terraform`.
+
+| Step | Command | Purpose |
+|---|---|---|
+| Formatting | `terraform fmt -check -recursive` | Fails if the configuration needs standard formatting |
+| Initialization | `terraform init -backend=false -input=false -lockfile=readonly` | Installs the locked provider without initializing the backend or changing the lock file |
+| Validation | `terraform validate -no-color` | Checks configuration syntax and internal consistency using the provider schema |
+
+These checks require no Azure credentials, subscription ID, import variable value, or copy of the developer's local state. Initialization still needs network access to download the provider. Validation does not contact Azure APIs and does not prove that an infrastructure change would succeed. See [`terraform validate`](https://developer.hashicorp.com/terraform/cli/commands/validate) and [`terraform init`](https://developer.hashicorp.com/terraform/cli/commands/init).
+
+### Required checks and deployment
+
+The **Protect main** ruleset requires **Check Python code** and **Check Terraform** before merging. In the workflow, `deploy` declares `needs: [lint, terraform]`, so it waits for both jobs to succeed. Its existing event condition limits application deployment to pushes to `main`; it remains skipped on pull requests.
+
+The CI job validates Terraform configuration. Planning against Azure and applying infrastructure changes remain local operations; the workflow executes neither `terraform plan` nor `terraform apply`. For the full pipeline and ruleset settings, see [Continuous Integration and Deployment](ci-cd.md).
+
+Potential next steps are a protected remote state backend, importing additional existing resources, and reusable configuration for another environment. These remain future work.

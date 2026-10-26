@@ -1,6 +1,8 @@
-# CloudDesk - Continuous Integration and Deployment
+# CloudDesk — Continuous Integration and Deployment
 
-CloudDesk uses a GitHub Actions pipeline to check the code and automatically deploy the API to Azure App Service after an update to `main`. This guide describes the configuration implemented and the results confirmed during the session. The `.github/workflows/ci.yml` file remains the source of truth for the settings executed by the workflow and any subsequent changes.
+Initial application deployment milestone validated on **21 October 2026**. Terraform CI checks and the additional required check were confirmed on **26 October 2026**.
+
+CloudDesk uses a GitHub Actions pipeline to check Python code and Terraform configuration, then automatically deploy the API to Azure App Service after an update to `main` when both check jobs succeed. This guide describes the workflow and the results reported by the project owner. The `.github/workflows/ci.yml` file remains the source of truth for the settings executed by the workflow and any subsequent changes.
 
 ## Validated results
 
@@ -9,8 +11,10 @@ CloudDesk uses a GitHub Actions pipeline to check the code and automatically dep
 | Local Ruff and pytest checks | Passed |
 | Deliberately incorrect test exercise | CI failed, then passed after the correction |
 | Pull request adding deployment | `Check Python code` passed; `Deploy to Azure` was skipped |
-| After merging into `main` | Both jobs passed |
+| After merging the initial deployment PR into `main` | Both jobs passed |
 | Remote HTTP check | `/health` responded and displayed the expected JSON |
+| Pull request adding Terraform CI checks | `Check Python code` and `Check Terraform` passed; `Deploy to Azure` was skipped |
+| Required checks after the ruleset update | Both `Check Python code` and `Check Terraform` displayed `Required` |
 
 Observed response:
 
@@ -18,39 +22,43 @@ Observed response:
 {"status":"ok","application":"clouddesk"}
 ```
 
-These checks were completed during the session. They do not provide continuous availability monitoring.
+These results were reported during the sessions. The Terraform CI extension was verified on its pull request; a post-merge deployment for that extension is not part of the evidence recorded here. These checks do not provide continuous availability monitoring.
 
 ## 1. Pipeline flow
 
 The workflow is named **CloudDesk CI** and is defined in `.github/workflows/ci.yml`.
 
-| Event | Job `lint` — Check Python code | Job `deploy` — Deploy to Azure |
-| --- | --- | --- |
-| Pull request targeting `main` | Runs | `Skipped` |
-| Push to `main`, including after a merge | Runs | Runs if `lint` succeeds |
-| Push to another branch without a PR | Not triggered by the current configuration | Not triggered |
+| Event | Job `lint` — Check Python code | Job `terraform` — Check Terraform | Job `deploy` — Deploy to Azure |
+| --- | --- | --- | --- |
+| Pull request targeting `main` | Runs | Runs | `Skipped` |
+| Push to `main`, including after a merge | Runs | Runs | Runs if both check jobs succeed |
+| Push to another branch without a PR | Not triggered | Not triggered | Not triggered |
 
 ```mermaid
 flowchart TD
-    pr["Pull request targeting main"] --> ci["Ruff and pytest"]
-    push["Push to main"] --> ci
-    ci --> result{"Checks passed?"}
-    result -->|No| failed["CI failed"]
-    result -->|Yes, pull request| skipped["Deployment skipped"]
-    result -->|Yes, push to main| deploy["OIDC login and ZIP deployment"]
+    event["Pull request targeting main or push to main"] --> python["Python: Ruff and pytest"]
+    event --> terraform["Terraform: fmt, init and validate"]
+    python --> result{"Both checks passed?"}
+    terraform --> result
+    result -->|No| failed["Deployment blocked"]
+    result -->|Yes| trigger{"Push to main?"}
+    trigger -->|No, pull request| skipped["Deployment skipped"]
+    trigger -->|Yes| deploy["OIDC login and ZIP deployment"]
     deploy --> health["HTTP check of /health"]
 ```
 
 Two mechanisms work together:
 
-- The ruleset for `main` requires the CI check before a merge.
-- `needs: lint` makes the deployment job depend on the successful check job in the same workflow run.
+- The ruleset for `main` requires **Check Python code** and **Check Terraform** before a merge.
+- `needs: [lint, terraform]` makes deployment depend on both successful check jobs in the same workflow run. The check jobs can run in parallel.
 
 The deployment job condition requires both the `push` event and the `refs/heads/main` reference. A `Skipped` deployment job on a PR is therefore expected.
 
 No path filters have been added: documentation changes also trigger CI, followed by deployment after merging into `main`.
 
 ## 2. Checks before deployment
+
+### Python
 
 The `lint` job keeps the display name **Check Python code**, even though it also runs the tests.
 
@@ -69,6 +77,20 @@ The test in `tests/test_health.py` calls the application using `TestClient` and 
 
 This test runs within the test process. It does not contact Azure or validate the hosting configuration.
 
+### Terraform
+
+The `terraform` job is displayed as **Check Terraform**. It runs on `ubuntu-24.04` with a 10-minute timeout and uses `infra/terraform` as the working directory for shell commands. It installs Terraform **1.16.7**, matching the version used for the local storage import, through `hashicorp/setup-terraform@v4.0.1`.
+
+| Check | Command | Purpose |
+| --- | --- | --- |
+| Formatting | `terraform fmt -check -recursive` | Checks standard formatting without rewriting files |
+| Initialization | `terraform init -backend=false -input=false -lockfile=readonly` | Installs the provider from the committed lock file, without backend initialization or lock file changes |
+| Configuration validation | `terraform validate -no-color` | Checks syntax and internal consistency using the provider schema |
+
+The job inherits `contents: read` and checks out the repository with `persist-credentials: false`. It needs no Azure login, OIDC permission, subscription variable, or Terraform state. Provider downloads still require network access.
+
+The workflow executes no Terraform planning or application. Passing validation does not prove Azure permissions, quota availability, or the absence of drift. Planning against Azure and applying infrastructure changes remain local operations. The [Terraform guide](terraform.md) explains the import and local state.
+
 ## 3. Protecting main
 
 The **Protect main** ruleset was configured to control changes.
@@ -81,14 +103,14 @@ The **Protect main** ruleset was configured to control changes.
 | Require a pull request before merging | Enabled |
 | Required approvals | `0`, appropriate for this individual project |
 | Require status checks to pass before merging | Enabled |
-| Required check | `Check Python code` |
+| Required checks | `Check Python code` and `Check Terraform` |
 | Require branches to be up to date before merging | Enabled |
 | Restrict deletions | Enabled |
 | Block force pushes | Enabled |
 
-The **Required** label was confirmed on the check in the PR.
+The **Required** label was confirmed on both checks in the PR after adding **Check Terraform** to the existing ruleset.
 
-The day-to-day process is to create a branch, open a PR, obtain a successful required check, and then merge. The check to select in the ruleset is the **job name**, `Check Python code`.
+The day-to-day process is to create a branch, open a PR, obtain successful required checks, and then merge. Select the **job names**, `Check Python code` and `Check Terraform`, in the ruleset.
 
 Ruleset settings are stored in GitHub; the YAML file alone cannot recreate this protection in another repository.
 
@@ -246,6 +268,7 @@ For the queueing issue, [actions/runner issue #3872](https://github.com/actions/
 When investigating a new failure, first identify the affected job and step:
 
 - **Check Python code**: dependency installation, Ruff findings, or pytest assertions.
+- **Check Terraform**: formatting differences, provider initialization or checksum errors, or configuration validation errors.
 - **Sign in to Azure with OIDC**: identity variables and an exact subject match with the configured trust relationship.
 - **Deploy to App Service**: role, scope, archive contents, and Python build logs.
 - **Check HTTP health**: HTTP response, startup, and App Service logs.
@@ -260,13 +283,17 @@ The current validation does not prove that the responding instance is running th
 
 The archive contains a fixed list of four files. Adding application modules or assets in the future will require reviewing this list.
 
-The workflow, test, and lockfile are version-controlled. Azure trust, the RBAC assignment, GitHub variables, and the ruleset were configured through the portals; they are not yet recreated through infrastructure as code.
+The workflow, tests, Terraform configuration, and Python and Terraform provider lock files are version-controlled. The existing storage account is managed through local Terraform, as described in the [Terraform guide](terraform.md). Azure federation trust, the RBAC assignment, GitHub variables, and the ruleset were configured through the portals; they are not yet recreated through infrastructure as code.
 
 No separate staging deployment, automatic rollback mechanism, or zero-downtime deployment strategy has been added.
 
 ## Official references
 
 - [GitHub — Rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
+- [GitHub — Workflow syntax and job dependencies](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
+- [HashiCorp — Terraform validation](https://developer.hashicorp.com/terraform/cli/commands/validate)
+- [HashiCorp — Terraform initialization](https://developer.hashicorp.com/terraform/cli/commands/init)
+- [HashiCorp — setup-terraform action](https://github.com/hashicorp/setup-terraform)
 - [GitHub — OIDC reference and immutable subjects](https://docs.github.com/en/actions/reference/security/oidc)
 - [Microsoft — Immutable GitHub subjects](https://learn.microsoft.com/en-us/entra/workload-id/workload-identities-github-immutable-subjects)
 - [Microsoft — Federation for a managed identity](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust-user-assigned-managed-identity)
@@ -277,3 +304,8 @@ No separate staging deployment, automatic rollback mechanism, or zero-downtime d
 - [Azure Login — Post-job cleanup](https://github.com/Azure/login#enabledisable-the-cleanup-steps)
 - [GitHub — Workflow and job concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
 - [curl — Option reference](https://curl.se/docs/manpage.html)
+
+---
+
+This document captures the initial deployment milestone of 21 October 2026 and the Terraform CI checks confirmed on 26 October 2026. Interface labels are shown in English.
+
