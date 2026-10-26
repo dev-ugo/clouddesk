@@ -14,3 +14,13 @@ wheels/
 .env
 .env.*
 !.env.example
+
+# Terraform local files
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
