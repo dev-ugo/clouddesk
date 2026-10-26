@@ -32,10 +32,42 @@ jobs:
 
       - name: Run tests
         run: uv run --locked python -m pytest
-        
+
+  terraform:
+    name: Check Terraform
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: infra/terraform
+
+    env:
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - name: Retrieve repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: "1.16.7"
+          terraform_wrapper: false
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialize Terraform for validation
+        run: terraform init -backend=false -input=false -lockfile=readonly
+
+      - name: Validate Terraform configuration
+        run: terraform validate -no-color
   deploy:
     name: Deploy to Azure
-    needs: lint
+    needs: [lint, terraform]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
