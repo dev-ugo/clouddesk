@@ -2,6 +2,8 @@
 
 Initial application deployment milestone validated on **21 October 2026**. Terraform CI checks and the additional required check were confirmed on **26 October 2026**.
 
+**Update on 2 November 2026:** Terraform state was migrated to a dedicated Azure Blob backend. The CI validation job continues to skip backend initialization and needs no state access.
+
 CloudDesk uses a GitHub Actions pipeline to check Python code and Terraform configuration, then automatically deploy the API to Azure App Service after an update to `main` when both check jobs succeed. This guide describes the workflow and the results reported by the project owner. The `.github/workflows/ci.yml` file remains the source of truth for the settings executed by the workflow and any subsequent changes.
 
 ## Validated results
@@ -15,6 +17,8 @@ CloudDesk uses a GitHub Actions pipeline to check Python code and Terraform conf
 | Remote HTTP check | `/health` responded and displayed the expected JSON |
 | Pull request adding Terraform CI checks | `Check Python code` and `Check Terraform` passed; `Deploy to Azure` was skipped |
 | Required checks after the ruleset update | Both `Check Python code` and `Check Terraform` displayed `Required` |
+| After merging the Terraform CI extension | The owner confirmed that all three jobs passed on `main` |
+| Remote state migration | Backend initialization succeeded; the subsequent local plan reported `No changes` |
 
 Observed response:
 
@@ -22,7 +26,7 @@ Observed response:
 {"status":"ok","application":"clouddesk"}
 ```
 
-These results were reported during the sessions. The Terraform CI extension was verified on its pull request; a post-merge deployment for that extension is not part of the evidence recorded here. These checks do not provide continuous availability monitoring.
+These results were reported during the sessions. The remote state migration's local checks are separate from the CI and application deployment checks. They do not provide continuous availability monitoring.
 
 ## 1. Pipeline flow
 
@@ -89,7 +93,9 @@ The `terraform` job is displayed as **Check Terraform**. It runs on `ubuntu-24.0
 
 The job inherits `contents: read` and checks out the repository with `persist-credentials: false`. It needs no Azure login, OIDC permission, subscription variable, or Terraform state. Provider downloads still require network access.
 
-The workflow executes no Terraform planning or application. Passing validation does not prove Azure permissions, quota availability, or the absence of drift. Planning against Azure and applying infrastructure changes remain local operations. The [Terraform guide](terraform.md) explains the import and local state.
+The workflow executes no Terraform planning or application. Passing validation does not prove Azure permissions, quota availability, or the absence of drift. Planning against Azure and applying infrastructure changes remain commands run by the developer. The [Terraform guide](terraform.md) explains the import, and the [remote state command record](terraform-remote-state.md) documents Azure CLI bootstrap and state migration.
+
+The developer's Terraform commands use the state blob in the private `tfstate` container of `stclouddesktfstateugo`. CI's `init -backend=false` does not initialize that backend. The developer's blob data role has not been granted to the GitHub deployment identity.
 
 ## 3. Protecting main
 
@@ -283,7 +289,7 @@ The current validation does not prove that the responding instance is running th
 
 The archive contains a fixed list of four files. Adding application modules or assets in the future will require reviewing this list.
 
-The workflow, tests, Terraform configuration, and Python and Terraform provider lock files are version-controlled. The existing storage account is managed through local Terraform, as described in the [Terraform guide](terraform.md). Azure federation trust, the RBAC assignment, GitHub variables, and the ruleset were configured through the portals; they are not yet recreated through infrastructure as code.
+The workflow, tests, Terraform configuration, and Python and Terraform provider lock files are version-controlled. The existing application storage account is managed through Terraform commands run locally, with state in Azure Blob Storage, as described in the [Terraform guide](terraform.md). The backend resources and developer's state access role were bootstrapped through Azure CLI. Azure federation trust, the deployment RBAC assignment, GitHub variables, and the ruleset were configured through the portals. These bootstrap and portal settings are not yet recreated by the application's Terraform configuration.
 
 No separate staging deployment, automatic rollback mechanism, or zero-downtime deployment strategy has been added.
 
@@ -307,5 +313,5 @@ No separate staging deployment, automatic rollback mechanism, or zero-downtime d
 
 ---
 
-This document captures the initial deployment milestone of 21 October 2026 and the Terraform CI checks confirmed on 26 October 2026. Interface labels are shown in English.
+This document captures the initial deployment milestone of 21 October 2026, Terraform CI checks confirmed on 26 October 2026, and the remote state update of 2 November 2026. Interface labels are shown in English.
 

@@ -6,6 +6,8 @@ CloudDesk uses Terraform to manage its existing Azure storage account. This firs
 
 The evidence below comes from commands and GitHub checks run by the project owner and reported during the exercise. It is a record of that milestone, rather than a live check of Azure.
 
+**State storage update on 2 November 2026:** the existing state was migrated to an Azure Blob backend. Backend initialization succeeded and the subsequent plan reported no changes. The original adoption steps below are retained as a record of the initial import.
+
 ## Purpose and scope
 
 Terraform describes the desired configuration of infrastructure. Its provider communicates with the platform APIs to create resources or change existing ones. An import associates an existing resource with a Terraform resource address, allowing gradual adoption on an established project. See [Terraform overview](https://developer.hashicorp.com/terraform/intro) and [resource imports](https://developer.hashicorp.com/terraform/language/import).
@@ -17,7 +19,7 @@ Terraform describes the desired configuration of infrastructure. Its provider co
 | Resource group | `rg-clouddesk-dev`, referenced by name |
 | Storage account region | `francecentral` |
 | Terraform resource address | `azurerm_storage_account.clouddesk` |
-| State storage | Local state in the original working directory |
+| State storage | Azure Blob backend: `stclouddesktfstateugo` / `tfstate` / `clouddesk-dev.tfstate` |
 | Execution | Local planning and application through WSL Ubuntu; formatting and validation in GitHub Actions |
 
 Only the storage account is imported. The resource group, App Service, App Service plan, managed identity, role assignments, container `documents`, and its blobs have not been imported as separate Terraform resources. Existing blob contents remain in Azure; importing an account does not download or back up those contents.
@@ -33,6 +35,7 @@ Local Terraform commands in this document run from the repository root, using `-
 | `infra/terraform/providers.tf` | Terraform and provider requirements, plus AzureRM provider settings |
 | `infra/terraform/imports.tf` | Storage account ID variable and the import declaration |
 | `infra/terraform/storage.tf` | The storage account's desired configuration |
+| `infra/terraform/backend.tf` | Remote state location and Microsoft Entra authentication through Azure CLI |
 | `infra/terraform/.terraform.lock.hcl` | The selected provider version and package verification hashes |
 | Root `.gitignore` | Excludes local provider downloads, state, plan files, and private variable files |
 
@@ -46,7 +49,7 @@ The provider uses these settings:
 | `storage_use_azuread = true` | Uses Microsoft Entra authentication for supported Blob and Queue data operations, consistent with Shared Key being disabled |
 | `resource_provider_registrations = "none"` | Avoids automatic Azure resource provider registration |
 
-These settings do not grant permissions. The signed-in user already has management access and a **Storage Blob Data Contributor** assignment at storage account scope. The data authentication setting is not a universal switch for every Azure Storage service. See the [AzureRM provider documentation](https://github.com/hashicorp/terraform-provider-azurerm/blob/main/website/docs/index.html.markdown).
+These settings do not grant permissions. The signed-in user already has management access and a **Storage Blob Data Contributor** assignment at application storage account scope. Remote state access uses a separate **Storage Blob Data Contributor** assignment on the backend container. The provider's data authentication setting is not a universal switch for every Azure Storage service and does not configure backend authentication. See the [AzureRM provider documentation](https://github.com/hashicorp/terraform-provider-azurerm/blob/main/website/docs/index.html.markdown).
 
 ## Adoption performed
 
@@ -148,7 +151,7 @@ A reachable public endpoint does not grant anonymous access to blob contents. Th
 
 The `.tf` files express the desired configuration. State records the association between that configuration and actual Azure resources, together with resource attributes. A saved plan records proposed operations for a particular planning run.
 
-State is currently stored locally in `infra/terraform/terraform.tfstate`. State and saved plans can contain sensitive values. They are excluded from Git, together with provider downloads and private variable files:
+State was initially stored locally in `infra/terraform/terraform.tfstate`. Since the migration on 2 November 2026, the active state is stored as `clouddesk-dev.tfstate` in the private `tfstate` container of `stclouddesktfstateugo`. State and saved plans can contain sensitive values. Local copies remain excluded from Git, together with provider downloads and private variable files:
 
 ```gitignore
 # Terraform local files
@@ -162,14 +165,14 @@ crash.log
 crash.*.log
 ```
 
-Git therefore preserves the configuration and provider lock file, while the authoritative state remains on the developer's machine. Keep that state available and protected. Cloning the repository on another machine does not retrieve it. Losing state does not delete Azure resources, but their Terraform associations must then be recovered deliberately. A shared remote backend is a future improvement. See [Terraform state](https://developer.hashicorp.com/terraform/language/state).
+Git preserves the configuration, backend declaration, and provider lock file. The authoritative state is in Azure, while the pre-migration backup remains a sensitive local copy. Another machine can initialize the same backend after Azure authentication and authorization. Azure Blob provides backend locking; a concurrent locking exercise has not been performed. The backend resources were created through Azure CLI and are separate from this application's Terraform-managed resource. See the [remote state command record](terraform-remote-state.md) and [Terraform state](https://developer.hashicorp.com/terraform/language/state).
 
 ## Routine local workflow
 
-These steps assume the original checkout and its authoritative state are available. If the CLI session has expired, sign in with `az login`. Check the active subscription locally before setting the two environment variables shown above; set them again in each new shell session.
+These steps assume the committed backend configuration is present and the signed-in developer has access to its state container. If the CLI session has expired, sign in with `az login`. Check the active subscription locally before setting the two environment variables shown above; set them again in each new shell session. Normal initialization connects to the existing remote state.
 
 ```bash
-terraform -chdir=infra/terraform init
+terraform -chdir=infra/terraform init -lockfile=readonly
 terraform -chdir=infra/terraform fmt -check
 terraform -chdir=infra/terraform validate
 terraform -chdir=infra/terraform state list
@@ -186,7 +189,7 @@ Terraform checks for differences when commands run. Continuous drift monitoring 
 
 The adoption commit was `761ee0f`, titled `infra: adopt existing Azure storage account with Terraform`. It included the four Terraform files and `.gitignore`. The owner reported one successful Python check and the expected skipped application deployment on the pull request, followed by successful checks after merging into `main`.
 
-The subsequent change on `ci/terraform-checks` adds the **Check Terraform** job to `.github/workflows/ci.yml`. On 26 October 2026, the owner confirmed that the Python and Terraform jobs passed on its pull request, deployment was skipped as expected, and both checks were marked **Required** after updating the **Protect main** ruleset. This records the PR checks; it does not claim a completed post-merge deployment for that change.
+The subsequent change on `ci/terraform-checks` added the **Check Terraform** job to `.github/workflows/ci.yml`. The owner confirmed that the Python and Terraform jobs passed on its pull request, deployment was skipped as expected, and both checks were marked **Required** after updating the **Protect main** ruleset. After merging, the owner also confirmed successful Python checks, Terraform checks, and application deployment on `main`.
 
 ### Terraform checks in CI
 
@@ -198,7 +201,7 @@ The job runs on `ubuntu-24.04`, has a 10-minute timeout, and installs Terraform 
 | Initialization | `terraform init -backend=false -input=false -lockfile=readonly` | Installs the locked provider without initializing the backend or changing the lock file |
 | Validation | `terraform validate -no-color` | Checks configuration syntax and internal consistency using the provider schema |
 
-These checks require no Azure credentials, subscription ID, import variable value, or copy of the developer's local state. Initialization still needs network access to download the provider. Validation does not contact Azure APIs and does not prove that an infrastructure change would succeed. See [`terraform validate`](https://developer.hashicorp.com/terraform/cli/commands/validate) and [`terraform init`](https://developer.hashicorp.com/terraform/cli/commands/init).
+These checks require no Azure credentials, subscription ID, import variable value, or access to the remote state. The `-backend=false` flag skips backend initialization. Provider installation still needs network access. Validation does not contact Azure APIs and does not prove that an infrastructure change would succeed. See [`terraform validate`](https://developer.hashicorp.com/terraform/cli/commands/validate) and [`terraform init`](https://developer.hashicorp.com/terraform/cli/commands/init).
 
 ### Required checks and deployment
 
@@ -206,4 +209,4 @@ The **Protect main** ruleset requires **Check Python code** and **Check Terrafor
 
 The CI job validates Terraform configuration. Planning against Azure and applying infrastructure changes remain local operations; the workflow executes neither `terraform plan` nor `terraform apply`. For the full pipeline and ruleset settings, see [Continuous Integration and Deployment](ci-cd.md).
 
-Potential next steps are a protected remote state backend, importing additional existing resources, and reusable configuration for another environment. These remain future work.
+Remote state is now configured. Potential next steps include a controlled locking or state-recovery exercise, importing additional existing resources, and reusable configuration for another environment. These remain future work.
