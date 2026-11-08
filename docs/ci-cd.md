@@ -4,7 +4,9 @@ Initial application deployment milestone validated on **21 October 2026**. Terra
 
 **Update on 2 November 2026:** Terraform state was migrated to a dedicated Azure Blob backend. The CI validation job continues to skip backend initialization and needs no state access.
 
-CloudDesk uses a GitHub Actions pipeline to check Python code and Terraform configuration, then automatically deploy the API to Azure App Service after an update to `main` when both check jobs succeed. This guide describes the workflow and the results reported by the project owner. The `.github/workflows/ci.yml` file remains the source of truth for the settings executed by the workflow and any subsequent changes.
+CloudDesk uses a GitHub Actions pipeline to check Python code and Terraform configuration, then automatically deploy the API to Azure App Service after an update to `main` when all three check jobs succeed. This guide describes the workflow and the results reported by the project owner. The `.github/workflows/ci.yml` file remains the source of truth for the settings executed by the workflow and any subsequent changes.
+
+**SecOps extension (8 November 2026, locally verified):** the workflow now also runs **Check security** and requires it before deployment. Weekly and manual runs execute checks without deploying. See the [SecOps guide](secops.md) for scope, local commands and the additional GitHub ruleset setting. Its first GitHub run and the ruleset update remain to be confirmed.
 
 ## Validated results
 
@@ -32,17 +34,19 @@ These results were reported during the sessions. The remote state migration's lo
 
 The workflow is named **CloudDesk CI** and is defined in `.github/workflows/ci.yml`.
 
-| Event | Job `lint` — Check Python code | Job `terraform` — Check Terraform | Job `deploy` — Deploy to Azure |
-| --- | --- | --- | --- |
-| Pull request targeting `main` | Runs | Runs | `Skipped` |
-| Push to `main`, including after a merge | Runs | Runs | Runs if both check jobs succeed |
-| Push to another branch without a PR | Not triggered | Not triggered | Not triggered |
+| Event | Job `lint` — Check Python code | Job `terraform` — Check Terraform | Job `security` — Check security | Job `deploy` — Deploy to Azure |
+| --- | --- | --- | --- | --- |
+| Pull request targeting `main` | Runs | Runs | Runs | `Skipped` |
+| Push to `main`, including after a merge | Runs | Runs | Runs | Runs if all three check jobs succeed |
+| Push to another branch without a PR | Not triggered | Not triggered | Not triggered | Not triggered |
 
 ```mermaid
 flowchart TD
     event["Pull request targeting main or push to main"] --> python["Python: Ruff and pytest"]
     event --> terraform["Terraform: fmt, init and validate"]
-    python --> result{"Both checks passed?"}
+    event --> security["Security: dependencies, code, secrets and Terraform"]
+    security --> result
+    python --> result{"All three checks passed?"}
     terraform --> result
     result -->|No| failed["Deployment blocked"]
     result -->|Yes| trigger{"Push to main?"}
@@ -54,7 +58,7 @@ flowchart TD
 Two mechanisms work together:
 
 - The ruleset for `main` requires **Check Python code** and **Check Terraform** before a merge.
-- `needs: [lint, terraform]` makes deployment depend on both successful check jobs in the same workflow run. The check jobs can run in parallel.
+- `needs: [lint, terraform, security]` makes deployment depend on all three successful check jobs in the same workflow run. The check jobs can run in parallel. Add **Check security** to the ruleset after its first GitHub run; the previously confirmed ruleset requires only the two original checks.
 
 The deployment job condition requires both the `push` event and the `refs/heads/main` reference. A `Skipped` deployment job on a PR is therefore expected.
 
@@ -314,4 +318,3 @@ No separate staging deployment, automatic rollback mechanism, or zero-downtime d
 ---
 
 This document captures the initial deployment milestone of 21 October 2026, Terraform CI checks confirmed on 26 October 2026, and the remote state update of 2 November 2026. Interface labels are shown in English.
-

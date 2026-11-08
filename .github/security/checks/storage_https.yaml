@@ -1,0 +1,17 @@
+metadata:
+  id: CLOUDDESK_AZURE_1
+  name: Ensure CloudDesk storage explicitly requires HTTPS
+  category: ENCRYPTION
+definition:
+  and:
+    - cond_type: attribute
+      resource_types:
+        - azurerm_storage_account
+      attribute: https_traffic_only_enabled
+      operator: exists
+    - cond_type: attribute
+      resource_types:
+        - azurerm_storage_account
+      attribute: https_traffic_only_enabled
+      operator: equals
+      value: true
