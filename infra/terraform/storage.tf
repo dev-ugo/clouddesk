@@ -26,6 +26,7 @@ resource "azurerm_storage_account" "clouddesk" {
     environment = "dev"
     owner       = "dev-ugo"
     project     = "clouddesk"
+    managed_by  = "terraform"
   }
   blob_properties {
     change_feed_enabled      = false
