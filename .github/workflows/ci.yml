@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
 
 permissions:
   contents: read
@@ -12,14 +15,17 @@ permissions:
 jobs:
   lint:
     name: Check Python code
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
 
     steps:
       - name: Retrieve repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install uv and Python
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
           enable-cache: true
           python-version: "3.13"
@@ -47,12 +53,12 @@ jobs:
 
     steps:
       - name: Retrieve repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v4.0.1
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: "1.16.7"
           terraform_wrapper: false
@@ -65,9 +71,67 @@ jobs:
 
       - name: Validate Terraform configuration
         run: terraform validate -no-color
+
+  security:
+    name: Check security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Retrieve repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: true
+          python-version: "3.13"
+          cache-dependency-glob: |
+            uv.lock
+            .github/security/uv.lock
+
+      - name: Install isolated security tools
+        id: tools
+        run: uv sync --project .github/security --locked
+
+      - name: Audit locked Python dependencies
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        run: |
+          uv export --locked --all-groups --no-emit-project \
+            --format requirements-txt \
+            --output-file "$RUNNER_TEMP/clouddesk-requirements.txt"
+          uv run --project .github/security --locked pip-audit \
+            --requirement "$RUNNER_TEMP/clouddesk-requirements.txt" \
+            --require-hashes --disable-pip
+
+      - name: Analyze Python security with Bandit
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        run: |
+          uv run --project .github/security --locked bandit \
+            --recursive . --exclude ./.venv,./.github/security/.venv,./tests
+
+      - name: Scan repository files for secrets
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        run: |
+          git ls-files --cached --others --exclude-standard -z | \
+            xargs -0 uv run --project .github/security --locked checkov \
+              --framework secrets --enable-secret-scan-all-files \
+              --compact --skip-download --file
+
+      - name: Check Terraform storage security baseline
+        if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
+        run: |
+          uv run --project .github/security --locked checkov \
+            --directory infra/terraform --framework terraform \
+            --external-checks-dir .github/security/checks \
+            --check CLOUDDESK_AZURE_1,CKV_AZURE_44,CKV_AZURE_190,CKV2_AZURE_38,CKV2_AZURE_40 \
+            --compact --skip-download
+
   deploy:
     name: Deploy to Azure
-    needs: [lint, terraform]
+    needs: [lint, terraform, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -86,7 +150,7 @@ jobs:
 
     steps:
       - name: Retrieve repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -96,7 +160,7 @@ jobs:
             main.py pyproject.toml uv.lock README.md
 
       - name: Sign in to Azure with OIDC
-        uses: azure/login@v3.1.0
+        uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
