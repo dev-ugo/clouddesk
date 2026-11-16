@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="880" viewBox="0 0 1040 880" role="img" aria-labelledby="title description">
+  <title id="title">CloudDesk architecture</title>
+  <desc id="description">An HTTP client calls the FastAPI Web App over HTTPS. GitHub Actions deploys it with OIDC and ZIP upload. An F1 App Service plan provides compute in France Central. The Web App uploads and downloads documents in a private Blob Storage container. Local Terraform manages the application storage account and reads and writes state in a separate storage account. Both storage accounts and App Service are in rg-clouddesk-dev, within a personal Azure subscription with a subscription-wide budget.</desc>
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #172b4d; }
+      .heading { font-size: 25px; font-weight: 700; }
+      .label { font-size: 18px; font-weight: 600; }
+      .body { font-size: 16px; }
+      .small { font-size: 14px; }
+      .muted { fill: #465b73; }
+      .blue { fill: #075985; }
+      .purple { fill: #6d28d9; }
+      .edge { fill: none; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+      .runtime { stroke: #0369a1; marker-end: url(#arrow-blue); }
+      .automation { stroke: #7c3aed; stroke-dasharray: 7 5; marker-end: url(#arrow-purple); }
+      .scope { stroke: #64748b; stroke-dasharray: 3 5; marker-end: url(#arrow-slate); }
+    </style>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#0369a1"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Opaque background keeps the same contrast in light and dark README themes. -->
+  <rect width="1040" height="880" rx="16" fill="#ffffff"/>
+  <text x="28" y="44" class="heading">CloudDesk architecture</text>
+  <text x="28" y="72" class="body muted">API hosting, document storage and delivery</text>
+
+  <!-- Azure boundaries and subscription-wide cost tracking. -->
+  <rect x="340" y="100" width="676" height="740" rx="18" fill="#f0f7ff" stroke="#a9c9e8" stroke-width="1.5"/>
+  <text x="364" y="138" class="label blue">Personal Azure subscription</text>
+  <rect x="700" y="156" width="292" height="46" rx="10" fill="#ffffff" stroke="#c5d4e3"/>
+  <text x="846" y="184" text-anchor="middle" class="body">Budget and alerts · all resources</text>
+  <path d="M 846 202 V 224" class="edge scope"/>
+
+  <rect x="364" y="224" width="628" height="590" rx="14" fill="#ffffff" stroke="#a9c9e8" stroke-width="1.5"/>
+  <text x="390" y="256" class="body muted">Resource group · rg-clouddesk-dev</text>
+
+  <!-- Compute capacity and application. -->
+  <rect x="390" y="280" width="576" height="84" rx="12" fill="#f1f5f9" stroke="#c5d4e3"/>
+  <text x="414" y="313" class="label">App Service plan</text>
+  <text x="414" y="341" class="body muted">Free F1 tier · France Central</text>
+  <path d="M 678 364 V 440" class="edge runtime"/>
+  <text x="694" y="407" class="body blue">Provides compute capacity</text>
+
+  <rect x="390" y="440" width="576" height="112" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="414" y="473" class="label blue">Web App · app-clouddesk-dev</text>
+  <text x="414" y="501" class="body">Python / FastAPI</text>
+  <text x="414" y="529" class="body muted">/health · /documents · /docs (OpenAPI)</text>
+
+  <!-- External clients and deployment; separate entry points avoid crossed edges. -->
+  <rect x="24" y="400" width="222" height="80" rx="12" fill="#f8fafc" stroke="#c5d4e3"/>
+  <text x="48" y="434" class="label">HTTP client</text>
+  <text x="48" y="460" class="body muted">API calls</text>
+  <path d="M 246 452 H 390" class="edge runtime"/>
+  <text x="318" y="438" text-anchor="middle" class="body blue">HTTPS</text>
+
+  <rect x="24" y="510" width="222" height="86" rx="12" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text x="48" y="545" class="label purple">GitHub Actions</text>
+  <text x="48" y="573" class="body muted">Checks and deployment</text>
+  <path d="M 246 538 H 390" class="edge automation"/>
+  <text x="318" y="523" text-anchor="middle" class="body purple">OIDC + ZIP</text>
+
+  <!-- Runtime document access is distinct from local infrastructure management. -->
+  <path d="M 528 552 V 654" class="edge runtime"/>
+  <text x="546" y="596" class="body blue">Document upload</text>
+  <text x="546" y="620" class="body blue">and download</text>
+
+  <rect x="390" y="654" width="276" height="92" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="410" y="683" class="label blue">Blob Storage</text>
+  <text x="410" y="709" class="body">stclouddeskdevugo</text>
+  <text x="410" y="732" class="small muted">Private container: documents</text>
+
+  <rect x="698" y="654" width="268" height="92" rx="12" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+  <text x="718" y="683" class="label purple">Terraform backend</text>
+  <text x="718" y="709" class="body">stclouddesktfstateugo</text>
+  <text x="718" y="732" class="small muted">Private container: tfstate</text>
+
+  <rect x="24" y="658" width="222" height="88" rx="12" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text x="48" y="694" class="label purple">Terraform</text>
+  <text x="48" y="722" class="body muted">Run locally</text>
+  <path d="M 246 710 H 390" class="edge automation"/>
+  <text x="318" y="679" text-anchor="middle" class="body purple">Manages</text>
+  <text x="318" y="699" text-anchor="middle" class="body purple">storage account</text>
+  <path d="M 135 746 V 794 H 832 V 746" class="edge automation"/>
+  <rect x="420" y="777" width="200" height="30" rx="6" fill="#ffffff"/>
+  <text x="520" y="798" text-anchor="middle" class="body purple">Reads and writes state</text>
+
+  <!-- Both line style and color identify the flows. -->
+  <path d="M 28 858 H 66" class="edge runtime"/>
+  <text x="78" y="863" class="small muted">Application / hosting</text>
+  <path d="M 288 858 H 326" class="edge automation"/>
+  <text x="338" y="863" class="small muted">Deployment / infrastructure</text>
+  <path d="M 594 858 H 632" class="edge scope"/>
+  <text x="644" y="863" class="small muted">Cost tracking</text>
+</svg>
