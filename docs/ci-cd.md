@@ -217,6 +217,7 @@ The `deploy` job runs on `ubuntu-24.04`, with a maximum job duration of **20 min
 The ZIP is created in `RUNNER_TEMP`, the runner's temporary directory. It contains only:
 
 - `main.py`;
+- `clouddesk/` (application modules);
 - `pyproject.toml`;
 - `uv.lock`;
 - `README.md`.
@@ -291,7 +292,7 @@ The automated pipeline deploys to the existing development environment. The appl
 
 The current validation does not prove that the responding instance is running the exact expected commit SHA. The remote check also does not measure availability over time or verify external dependencies.
 
-The archive contains a fixed list of four files. Adding application modules or assets in the future will require reviewing this list.
+The archive contains an explicit list of files and the `clouddesk/` application directory. Adding other application modules or assets in the future will require reviewing this list.
 
 The workflow, tests, Terraform configuration, and Python and Terraform provider lock files are version-controlled. The existing application storage account is managed through Terraform commands run locally, with state in Azure Blob Storage, as described in the [Terraform guide](terraform.md). The backend resources and developer's state access role were bootstrapped through Azure CLI. Azure federation trust, the deployment RBAC assignment, GitHub variables, and the ruleset were configured through the portals. These bootstrap and portal settings are not yet recreated by the application's Terraform configuration.
 

@@ -157,7 +157,7 @@ jobs:
       - name: Create deployment archive
         run: |
           python3 -m zipfile -c "$RUNNER_TEMP/clouddesk.zip" \
-            main.py pyproject.toml uv.lock README.md
+            main.py clouddesk pyproject.toml uv.lock README.md
 
       - name: Sign in to Azure with OIDC
         uses: azure/login@053f7285eb20bf5469ef084617b0b24d3cec53fc # v3.1.0

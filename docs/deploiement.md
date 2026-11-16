@@ -65,7 +65,7 @@ Check the exact values and currency in the budget that was created. This amount 
 
 ## 2. Prepare the Python project
 
-The code to deploy is in `main.py`. The `fastapi` and `uvicorn` dependencies are declared in `pyproject.toml`, with their resolved versions in `uv.lock`.
+The application entry point is `main.py`; the request creation feature is in `clouddesk/`. Both must be deployed. The `fastapi` and `uvicorn` dependencies are declared in `pyproject.toml`, with their resolved versions in `uv.lock`.
 
 For this simple structure, keep the following configuration:
 
@@ -178,10 +178,10 @@ Changing app settings triggers a restart. The validation procedure is described 
 
 ```bash
 uv run python -m zipfile -c /tmp/clouddesk.zip \
-  main.py pyproject.toml uv.lock README.md
+  main.py clouddesk pyproject.toml uv.lock README.md
 ```
 
-The archive contains the code and the files required for preparation. The local `.venv` environment, Git, and any `.env` files are left out. Files must be directly at the root of the ZIP, without a parent `clouddesk/` folder.
+The archive contains the code and the files required for preparation. The local `.venv` environment, Git, and any `.env` files are left out. `main.py` and the project configuration must be directly at the root of the ZIP, alongside the `clouddesk/` application package, without wrapping the archive in a repository directory.
 
 ```bash
 az webapp deploy \
