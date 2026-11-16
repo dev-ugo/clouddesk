@@ -38,26 +38,7 @@ The Python version and tool versions were not recorded during the first session.
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    client["HTTP client"]
-    subgraph abonnement["Personal Azure subscription"]
-        subgraph groupe["Resource group: rg-clouddesk-dev"]
-            plan["App Service Plan F1: France Central"]
-            web["Web App: app-clouddesk-dev"]
-            storage["Blob Storage: stclouddeskdevugo / documents"]
-            state["Terraform backend: stclouddesktfstateugo / tfstate"]
-            plan -->|Provides compute capacity| web
-            web -->|Document upload and download| storage
-        end
-        budget["Budget and alerts"]
-        budget -.->|Tracks costs| groupe
-    end
-    client -->|HTTPS: health, documents, OpenAPI| web
-    github["GitHub Actions"] -->|OIDC and ZIP deployment| web
-    terraform["Terraform run locally"] -->|Manages storage account| storage
-    terraform -->|Reads and writes state| state
-```
+[![CloudDesk architecture: HTTP client and GitHub Actions connect to Azure App Service; the application uses Blob Storage for documents. Local Terraform manages application storage and uses a separate state backend. A subscription-wide budget tracks costs.](docs/assets/architecture.svg)](docs/assets/architecture.svg)
 
 The resource group organizes the components. The plan defines the hosting capacity and pricing tier. The Web App holds the application's configuration and its domain. A subscription-wide budget also tracks spending on any resources created outside this group.
 
