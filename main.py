@@ -6,7 +6,10 @@ from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 from fastapi import FastAPI, HTTPException, Response, UploadFile
 
+from clouddesk.requests.router import router as requests_router
+
 app = FastAPI(title="CloudDesk API", version="0.1.0")
+app.include_router(requests_router)
 
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
@@ -50,6 +53,7 @@ def upload_document(file: UploadFile):
         "filename": file.filename,
         "size": len(content),
     }
+
 
 @app.get("/documents/{document_id}")
 def download_document(document_id: UUID):
