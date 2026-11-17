@@ -159,6 +159,7 @@ This division connects the project to the AZ-900 concepts of PaaS and shared res
 
 ## Practical guides
 
+- [Threat model](docs/threat-model.md): three main risks explained with simple examples and a visual diagram.
 - [Deployment](docs/deploiement.md): resources, Python configuration, Azure CLI commands, and issues from the first deployment.
 - [Monitoring and diagnostics](docs/supervision.md): Metrics, private dashboard, Log stream, warm-up, and Activity log, with the observed results.
 - [CI/CD with GitHub Actions and Azure](docs/ci-cd.md)

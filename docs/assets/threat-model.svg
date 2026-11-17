@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="880" viewBox="0 0 720 880" role="img" aria-labelledby="title description" lang="en">
+  <title id="title">CloudDesk: where should documents be protected?</title>
+  <desc id="description">From top to bottom: a visitor uploads or requests a document through CloudDesk. CloudDesk accesses private Azure storage using its own permissions. The current code does not check who can upload or read documents. The missing protection is to check who the person is and whether they are allowed to access the document. Private storage alone does not protect documents served by the application. Actual Azure settings still need to be checked.</desc>
+  <defs>
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; fill: #172b4d; }
+      .title { font-size: 30px; font-weight: 700; }
+      .heading { font-size: 26px; font-weight: 700; }
+      .body { font-size: 22px; }
+      .note { font-size: 18px; fill: #475569; }
+      .warning { fill: #854500; }
+      .arrow { fill: none; stroke: #475569; stroke-width: 3; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <!-- Opaque background preserves contrast in both light and dark viewers. -->
+  <rect width="720" height="880" rx="20" fill="#ffffff"/>
+  <text x="360" y="49" text-anchor="middle" class="title">Where should we protect documents?</text>
+  <text x="360" y="84" text-anchor="middle" class="body">How a file moves through CloudDesk</text>
+
+  <rect x="80" y="118" width="560" height="108" rx="16" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+  <text x="360" y="159" text-anchor="middle" class="heading">A visitor</text>
+  <text x="360" y="195" text-anchor="middle" class="body">A person using the application</text>
+
+  <path d="M 180 226 V 294" class="arrow"/>
+  <text x="210" y="256" class="body">Uploads a file</text>
+  <text x="210" y="283" class="body">or asks to download one</text>
+
+  <rect x="48" y="306" width="624" height="236" rx="16" fill="#fff8e8" stroke="#a35b00" stroke-width="2"/>
+  <text x="360" y="348" text-anchor="middle" class="heading">CloudDesk</text>
+  <text x="360" y="385" text-anchor="middle" class="body warning">Today: no identity check</text>
+  <text x="360" y="414" text-anchor="middle" class="body warning">to upload or read a document.</text>
+  <line x1="88" y1="438" x2="632" y2="438" stroke="#d8b573"/>
+  <text x="360" y="474" text-anchor="middle" class="heading">Add a check here</text>
+  <text x="360" y="511" text-anchor="middle" class="body">Who are you? Are you allowed access?</text>
+
+  <path d="M 180 542 V 610" class="arrow"/>
+  <text x="210" y="572" class="body">CloudDesk accesses files</text>
+  <text x="210" y="599" class="body">using its own permissions</text>
+
+  <rect x="80" y="622" width="560" height="115" rx="16" fill="#edf5ff" stroke="#2563a3" stroke-width="2"/>
+  <text x="360" y="663" text-anchor="middle" class="heading">Private Azure storage</text>
+  <text x="360" y="700" text-anchor="middle" class="body">Files are kept here</text>
+
+  <text x="360" y="782" text-anchor="middle" class="heading">CloudDesk must check access,</text>
+  <text x="360" y="816" text-anchor="middle" class="heading">even when storage is private.</text>
+  <text x="360" y="855" text-anchor="middle" class="note">Based on the code. Actual Azure settings need checking.</text>
+</svg>
