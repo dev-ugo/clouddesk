@@ -8,11 +8,11 @@ Personal project to prepare for the **AZ-900**, then **AZ-104** certifications: 
 
 **Monitoring practiced on October 19, 2026**: observing requests and 404 responses, saving a private dashboard, reading logs, configuring warm-up on `/health`, and reviewing the administration history. This documentation covers the observations confirmed during these sessions.
 
-The application now implements IT request creation and document upload/download through Azure Blob Storage, alongside the health endpoint and interactive OpenAPI documentation. GitHub Actions runs Python, Terraform, and security checks, then deploys to App Service on updates to `main` when all three check jobs succeed. The application storage account is managed with Terraform, whose state is stored in a separate Azure Blob Storage account.
+The application now supports creating and reading IT requests and uploading and downloading documents through Azure Blob Storage. It also provides a health endpoint and interactive OpenAPI documentation. GitHub Actions runs Python, Terraform, and security checks, then deploys to App Service on updates to `main` when all three check jobs succeed. The application storage account is managed with Terraform, whose state is stored in a separate Azure Blob Storage account.
 
-The first functional step is limited to creating an IT request with a title, description, and priority. The API generates its ID, initial `open` status, and UTC timestamps, then saves it as JSON in a separate private `requests` container. This route requires a shared API key; there are no user accounts or web interface yet. Listing, reading, and processing requests are future steps. Documents are currently independent files, without a link to a request.
+When a caller submits a title, description, and priority, the API generates the request ID, initial `open` status, and UTC timestamps, then saves the record as JSON in a private `requests` container. Callers can retrieve the same record by ID. Both routes require a shared API key. Listing and processing requests are future steps. Documents are currently independent files, without a link to a request.
 
-The document and request tests use mocked Azure clients. They check API behavior without contacting Azure; they do not establish that the deployed application has working storage access. The new request container, runtime permissions, and API key must be configured before using request creation in Azure.
+The project owner confirmed that request creation through the deployed App Service writes to Azure Blob Storage. The document and request tests use mocked Azure clients. See the request guide for the runtime configuration and verification steps.
 
 | Item | Selected configuration |
 | --- | --- |
@@ -25,7 +25,7 @@ The document and request tests use mocked Azure clients. They check API behavior
 | Hosting region | France Central (`francecentral`) |
 | Deployment | GitHub Actions, OIDC authentication, and ZIP upload with Azure CLI |
 | Application storage | `stclouddeskdevugo`, private `documents` container, Microsoft Entra ID credentials |
-| IT request storage | One JSON blob per request in a separate private `requests` container, to provision before use |
+| IT request storage | One JSON blob per request in a separate private `requests` container |
 | Infrastructure as code | Terraform for the application storage account |
 | Terraform state | `stclouddesktfstateugo`, private `tfstate` container |
 | Automated checks | Ruff, pytest, Terraform formatting and validation, and security scans |
@@ -81,9 +81,9 @@ The application uses `DefaultAzureCredential`. In App Service, configure the sam
 
 Without the storage URL, `/health` and `/docs` remain available, while the document routes return `503`. The [storage guide](docs/storage.md) records the initial portal exercise and the developer's data access; it predates the application's document routes.
 
-### Creating an IT request
+### Creating and reading IT requests
 
-See the [request creation guide](docs/requests.md) to provision the private `requests` container, configure `CLOUDDESK_API_KEY`, and call `POST /requests`. This feature reuses the existing Azure SDK and storage account. It does not use a local database or save requests on the App Service filesystem.
+The [IT request guide](docs/requests.md) explains how to provision the private `requests` container, configure `CLOUDDESK_API_KEY`, and call the creation and read routes.
 
 ## Current API
 
@@ -91,13 +91,14 @@ See the [request creation guide](docs/requests.md) to provision the private `req
 | --- | --- | --- |
 | `GET` | `/health` | Returns the application health response, without checking storage. |
 | `POST` | `/requests` | Requires a bearer API key; validates and saves an IT request, then returns the complete record with `201`. |
+| `GET` | `/requests/{request_id}` | Requires a bearer API key and returns the stored record with `200`, or `404` if the request is missing. |
 | `POST` | `/documents` | Accepts a multipart `file`, stores it under `uploads/{id}`, and returns `201` with its UUID, original filename, and size in bytes. |
 | `GET` | `/documents/{document_id}` | Downloads a document by UUID as `application/octet-stream`, with the filename `{id}.bin`. |
 | `GET` | `/docs` | Opens the interactive API documentation. |
 
 Uploads must be non-empty and at most **5 MiB**. Empty files return `400`; oversized files return `413`. Downloads also enforce the size limit. Invalid document UUIDs return `422`, missing documents return `404`, and missing storage configuration or Azure SDK errors return `503`.
 
-The original filename is returned at upload time but is not persisted as application metadata. The document routes currently have no user authentication or per-document access rules; the private storage container protects direct blob access, while the API uses its own Azure credentials. The API key protects only the new request creation route.
+The original filename is returned at upload time but is not persisted as application metadata. The document routes currently have no user authentication or per-document access rules; the private storage container protects direct blob access, while the API uses its own Azure credentials. The API key protects the creation and read routes for IT requests.
 
 ## Development checks and deployment
 
@@ -108,7 +109,7 @@ uv run --locked ruff check .
 uv run --locked python -m pytest
 ```
 
-Tests cover `/health`, document upload/download, and request creation. Request tests check the saved JSON, generated fields, validation, API key checks, and storage failures. Azure credentials and storage clients are replaced with mocks.
+Tests cover `/health`, document upload and download, and IT request creation and retrieval. Request tests check the stored record, validation, API key checks, missing requests, and storage failures. Azure credentials and storage clients are replaced with mocks.
 
 The [GitHub Actions workflow](.github/workflows/ci.yml) runs Python checks, Terraform formatting and validation, and security checks on pull requests targeting `main` and pushes to `main`. Checks can also run manually and on a weekly schedule. Deployment runs only on pushes to `main` after all three check jobs pass, then calls `/health` remotely. Terraform planning and application remain local operations.
 
@@ -118,13 +119,9 @@ The deployment archive includes `main.py`, the `clouddesk/` application modules,
 
 ## Next application milestone
 
-Request creation is implemented. The next steps toward a usable IT request workflow are:
+Callers can create and retrieve requests by ID. The next milestones are to list requests and then support status changes from `open` through `in progress` to `resolved`.
 
-1. Validate real Azure persistence with the configured private `requests` container and runtime identity.
-2. Add routes to list and read requests.
-3. Add status changes from open to in progress to resolved, with appropriate persistence and tests.
-
-The current acceptance scenario is to create a request and verify its JSON in Blob Storage. Each request is written independently without overwriting an existing blob. Blob storage is sufficient for this creation-only step; queries, pagination, and concurrent status changes will require a separate design decision. Linking existing documents to requests, adding users and access rules, and building a web interface will follow.
+The acceptance scenario is to create a request, verify its JSON in Blob Storage, and retrieve the same record by ID. Listing and status updates will require decisions about pagination and concurrent writes. Linking documents to requests, adding users and access rules, and building a web interface will follow.
 
 ## Technical choices and rationale
 
@@ -139,8 +136,8 @@ The current acceptance scenario is to create a request and verify its JSON in Bl
 | Dedicated development group | Make CloudDesk's lifecycle easier to manage. | Deleting the group deletes the resources it contains. |
 | GitHub Actions and ZIP deployment | Check changes before automatically deploying updates to `main`, using OIDC for Azure authentication. | The archive uses an explicit file list; the remote health check does not verify storage access. |
 | Azure Blob Storage | Store uploaded document content separately from application code. | Request associations and persistent document metadata still need to be built. |
-| JSON blobs for IT request creation | Reuse existing storage and dependencies, with one independent write per request. | Requires a separate private container and runtime access; future querying may justify a database. |
-| Shared bearer API key for request creation | Protect the new write route while keeping this first feature small. | A shared secret does not provide user identity or per-user permissions; document routes are still unprotected. |
+| JSON blobs for IT requests | Reuse existing storage and dependencies, with one blob per request addressed by ID. | Requires a separate private container and runtime access; future querying may justify a database. |
+| Shared bearer API key for IT requests | Protect request creation and retrieval with one shared credential. | Every key holder can read any known request ID. |
 | Terraform with remote state | Version the application storage account configuration and keep state in a dedicated Azure backend. | App Service, identities, RBAC assignments, and backend bootstrap are outside the current Terraform configuration. |
 | Subscription-level budget | Track spending across the entire lab. | Alerts do not stop resources or consumption. |
 | Private dashboard | Retrieve monitoring charts without rebuilding their configuration. | Created in the portal and associated with the account; its JSON export is not yet versioned. |
@@ -165,7 +162,7 @@ This division connects the project to the AZ-900 concepts of PaaS and shared res
 - [CI/CD with GitHub Actions and Azure](docs/ci-cd.md)
 - [SecOps: security checks and dependency updates](docs/secops.md)
 - [Azure Blob Storage](docs/storage.md)
-- [IT request creation](docs/requests.md): API contract, private container, API key, and manual validation.
+- [IT request API](docs/requests.md) covers the API contract, private container, API key, and manual verification.
 - [Terraform: adopting the existing storage account](docs/terraform.md)
 - [Terraform remote state](docs/terraform-remote-state.md)
 

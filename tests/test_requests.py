@@ -2,7 +2,7 @@ import json
 import secrets
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from azure.core.exceptions import (
@@ -193,6 +193,102 @@ def test_failed_save_does_not_report_success_or_leak_sdk_errors(client, storage,
     assert response.status_code == 503
     assert response.json() == {"detail": "Impossible de sauvegarder la demande."}
     assert blob.upload_blob.call_count == 1
+
+
+def test_read_returns_the_created_record(client, storage):
+    created = client.post("/requests", json=PAYLOAD)
+    assert created.status_code == 201
+    request_id = created.json()["id"]
+    blob = storage.get_blob_client.return_value
+    blob.download_blob.return_value.readall.return_value = (
+        blob.upload_blob.call_args.args[0]
+    )
+    storage.get_blob_client.reset_mock()
+
+    response = client.get(f"/requests/{request_id}")
+
+    assert response.status_code == 200
+    assert response.json() == created.json()
+    storage.get_blob_client.assert_called_once_with(
+        container="requests", blob=f"{request_id}.json"
+    )
+    blob.download_blob.assert_called_once_with()
+    blob.upload_blob.assert_not_called()
+
+
+@pytest.mark.parametrize("authorization", [None, "Bearer invalid"])
+def test_unauthorized_read_cannot_access_storage(client, storage, authorization):
+    client.headers.pop("Authorization")
+    headers = {} if authorization is None else {"Authorization": authorization}
+
+    response = client.get(f"/requests/{uuid4()}", headers=headers)
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    storage.get_blob_client.assert_not_called()
+
+
+def test_read_rejects_invalid_uuid(client, storage):
+    response = client.get("/requests/invalid")
+
+    assert response.status_code == 422
+    storage.get_blob_client.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("error_code", "status_code", "message"),
+    [
+        ("BlobNotFound", 404, "Demande introuvable."),
+        ("ContainerNotFound", 503, "Impossible de lire la demande."),
+    ],
+)
+def test_read_distinguishes_missing_blob_from_missing_container(
+    client, storage, error_code, status_code, message
+):
+    error = ResourceNotFoundError("Internal storage error with sensitive details")
+    error.error_code = error_code
+    storage.get_blob_client.return_value.download_blob.side_effect = error
+
+    response = client.get(f"/requests/{uuid4()}")
+
+    assert response.status_code == status_code
+    assert response.json() == {"detail": message}
+
+
+def test_failed_download_does_not_leak_sdk_errors(client, storage):
+    blob = storage.get_blob_client.return_value
+    blob.download_blob.return_value.readall.side_effect = AzureError(
+        "Internal storage error with sensitive details"
+    )
+
+    response = client.get(f"/requests/{uuid4()}")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Impossible de lire la demande."}
+
+
+def test_read_rejects_invalid_json(client, storage):
+    blob = storage.get_blob_client.return_value
+    blob.download_blob.return_value.readall.return_value = b"invalid JSON"
+
+    response = client.get(f"/requests/{uuid4()}")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Les données de la demande sont invalides."}
+
+
+def test_read_rejects_a_record_with_a_different_id(client, storage):
+    created = client.post("/requests", json=PAYLOAD)
+    assert created.status_code == 201
+    blob = storage.get_blob_client.return_value
+    blob.download_blob.return_value.readall.return_value = (
+        blob.upload_blob.call_args.args[0]
+    )
+
+    response = client.get(f"/requests/{uuid4()}")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Les données de la demande sont invalides."}
 
 
 def test_health_still_works_without_request_configuration(client, monkeypatch):

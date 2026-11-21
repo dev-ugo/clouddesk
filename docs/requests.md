@@ -1,16 +1,16 @@
-# IT request creation
+# IT request creation and retrieval
 
-This first feature adds only `POST /requests`. It saves one JSON blob per request in a private `requests` container in the existing storage account. No database service or dependency is added. Listing, reading, updating, and attaching documents are outside this step.
+`POST /requests` saves one JSON blob per request in the private `requests` container. `GET /requests/{request_id}` retrieves that record by UUID. Both routes use the same bearer API key and storage account.
 
 ## Code structure
 
 - `main.py` registers the request router alongside the existing routes.
 - `clouddesk/requests/models.py` defines the input validation and returned record.
-- `clouddesk/requests/router.py` generates server fields and coordinates creation.
+- `clouddesk/requests/router.py` generates server fields for new requests and exposes both routes.
 - `clouddesk/requests/storage.py` handles Azure configuration and persistence.
 - `clouddesk/security.py` checks the bearer API key.
 
-There is no additional service layer for this single operation. Azure exceptions are translated into a generic `503` response; their internal details are not sent to the caller.
+The API returns `404` when the requested blob is missing and a generic `503` for other storage failures.
 
 ## Configuration
 
@@ -48,7 +48,11 @@ The API key is a limited access control for this development feature. It does no
 
 ## API contract
 
-Send JSON with `Authorization: Bearer <CLOUDDESK_API_KEY>`:
+Both routes expect the `Authorization: Bearer <CLOUDDESK_API_KEY>` header.
+
+### `POST /requests`
+
+Send the request details as JSON.
 
 ```json
 {
@@ -60,7 +64,7 @@ Send JSON with `Authorization: Bearer <CLOUDDESK_API_KEY>`:
 
 `title` and `description` are required strings. Surrounding whitespace is removed before checking that they contain 1–200 and 1–5000 characters respectively. `priority` accepts `low`, `medium`, or `high`, and defaults to `medium`. Unknown fields are rejected, including client-supplied IDs, status, and timestamps.
 
-After a successful Azure write, the API returns `201`:
+The API returns `201` after a successful Azure write. The response contains the full record.
 
 ```json
 {
@@ -85,6 +89,18 @@ The same record is saved as UTF-8 JSON at `requests/{id}.json` (container/blob).
 
 There is no idempotency key in this step: two successful submissions produce two requests. If a connection fails after Azure accepts a write, the caller may receive an error even though a blob exists. Check storage before retrying an uncertain submission.
 
+### `GET /requests/{request_id}`
+
+Use the UUID returned by `POST /requests` to retrieve the same record from `requests/{request_id}.json`.
+
+| HTTP status | Meaning |
+| --- | --- |
+| `200` | The stored request record. |
+| `401` | Missing or invalid bearer key. |
+| `404` | No blob exists for this UUID. |
+| `422` | Invalid UUID. |
+| `503` | API key or storage configuration error, Azure failure, or invalid stored record. |
+
 ## Verification
 
 Use the **Authorize** button in `/docs` and paste the API key, then try `POST /requests`. Alternatively, from a shell with the same environment key as the running API:
@@ -97,7 +113,15 @@ curl --fail-with-body --include \
   --data '{"title":"Test VPN","description":"Connexion impossible","priority":"high"}'
 ```
 
-Check the returned `201` and verify the matching `{id}.json` in the private `requests` container. Restart the application and confirm that blob is still present. Request content is stored outside the application filesystem. No public retrieval route is added in this step.
+Check the returned `201` and verify the matching `{id}.json` in the private `requests` container. Set `REQUEST_ID` to the returned UUID and retrieve the record.
+
+```bash
+curl --fail-with-body --include \
+  "http://localhost:8000/requests/$REQUEST_ID" \
+  --header "Authorization: Bearer $CLOUDDESK_API_KEY"
+```
+
+Check that the response is `200` and its JSON matches the creation response. Try an unknown UUID with the same key and expect `404`. Repeat the request without the authorization header and expect `401`.
 
 Run the local checks:
 
@@ -106,8 +130,8 @@ uv run --locked ruff check .
 uv run --locked python -m pytest
 ```
 
-Automated tests use mocked Azure clients to check saved content, validation boundaries, authentication failures, and Azure errors. They do not prove access to the real container or persistence across a deployed application restart.
+Automated tests use mocked Azure clients to check the creation and read flows, validation, authentication, and storage errors.
 
-The project owner confirmed completion of the manual pre-commit checks: local request creation against real Azure Blob Storage, verification of the saved JSON, persistence after a local application restart, and rejection of unauthorized and invalid submissions. App Service identity, permissions, and environment settings were also reported as configured. Request creation through the deployed App Service and its runtime identity remains to be verified after deployment.
+The project owner confirmed that request creation works both locally and through the deployed App Service with Azure Blob Storage. The local checks also verified persistence across an application restart and rejection of unauthorized and invalid submissions. For the deployed read check, use the App Service HTTPS URL in the commands above.
 
 [Back to README](../README.md)
